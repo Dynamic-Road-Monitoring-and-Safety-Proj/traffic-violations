@@ -1,0 +1,86 @@
+# =============================================================================
+# Traffic Violation Detection - Docker Compose
+# =============================================================================
+# Development and production configurations
+
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # CPU-only service (default)
+  # ---------------------------------------------------------------------------
+  traffic-detector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: traffic-violation-detector:latest
+    container_name: traffic-detector
+    volumes:
+      # Mount input/output directories
+      - ./input:/app/input:ro
+      - ./output:/app/output
+      - ./logs:/app/logs
+      # Mount models directory (if using custom models)
+      - ./models:/app/models:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+    # Override command for batch processing
+    # command: ["--directory", "/app/input", "--output-dir", "/app/output"]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # GPU-enabled service (requires nvidia-docker)
+  # ---------------------------------------------------------------------------
+  traffic-detector-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: gpu
+    image: traffic-violation-detector:gpu
+    container_name: traffic-detector-gpu
+    volumes:
+      - ./input:/app/input:ro
+      - ./output:/app/output
+      - ./logs:/app/logs
+      - ./models:/app/models:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Development service with hot reload
+  # ---------------------------------------------------------------------------
+  traffic-detector-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: traffic-violation-detector:dev
+    container_name: traffic-detector-dev
+    volumes:
+      - .:/app
+      - ./input:/app/input:ro
+      - ./output:/app/output
+      - ./logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=DEBUG
+    command: ["--help"]
+    profiles:
+      - dev
+
+# Networks (for future API integration)
+networks:
+  default:
+    name: traffic-violation-network

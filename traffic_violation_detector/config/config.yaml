@@ -1,0 +1,77 @@
+# Traffic Violation Detection Pipeline Configuration
+# ==================================================
+
+# Model Paths (relative to project root)
+models:
+  # YOLOv11 for motorcycle/scooter detection
+  vehicle_detector: "models/yolo11n.pt"
+  
+  # Helmet detection model (trained on helmet/head classes)
+  helmet_detector: "models/helmet_detector.pt"
+  
+  # License plate detection model
+  plate_detector: "models/license-plate-finetune-v1m.pt"
+  
+  # OCR model for license plate recognition (from fast-plate-ocr hub)
+  plate_ocr: "global-plates-mobile-vit-v2-model"
+
+# Detection Classes
+detection:
+  # COCO classes for two-wheelers (3 = motorcycle)
+  two_wheeler_classes: [3]
+  
+  # Helmet detector classes
+  helmet_classes:
+    head: 0        # No helmet (violation)
+    helmet: 1      # Wearing helmet (compliant)
+  
+  # Confidence thresholds
+  thresholds:
+    vehicle: 0.5
+    helmet: 0.45
+    plate: 0.4
+
+# Processing Settings
+processing:
+  # Image resize for processing (width, height)
+  frame_size: [640, 480]
+  
+  # Batch processing
+  batch_size: 1
+  
+  # Region of Interest expansion for helmet detection
+  roi_expansion: 1.2
+  
+  # Non-maximum suppression IoU threshold
+  nms_iou: 0.45
+
+# Output Configuration
+output:
+  # Output directory for results
+  output_dir: "output"
+  
+  # CSV file for violations log
+  violations_csv: "violations.csv"
+  
+  # Save annotated images
+  save_images: true
+  
+  # Images subdirectory
+  images_dir: "violation_images"
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  log_file: "logs/pipeline.log"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# AWS Deployment Settings (for future use)
+aws:
+  # S3 bucket for storing results
+  s3_bucket: ""
+  
+  # SQS queue for processing requests
+  sqs_queue: ""
+  
+  # Enable S3 upload
+  enable_s3_upload: false

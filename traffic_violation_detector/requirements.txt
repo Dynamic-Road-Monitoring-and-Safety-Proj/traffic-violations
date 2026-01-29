@@ -1,0 +1,29 @@
+# Traffic Violation Detection - Python Dependencies
+# ================================================
+
+# Core Deep Learning
+ultralytics>=8.3.0          # YOLOv8/v11 for object detection
+torch>=2.0.0                # PyTorch backend
+torchvision>=0.15.0         # Vision utilities
+
+# Computer Vision
+opencv-python>=4.8.0        # Image/video processing
+numpy>=1.24.0               # Numerical operations
+
+# OCR (fast-plate-ocr dependencies)
+onnxruntime>=1.16.0         # ONNX runtime for OCR inference
+pyyaml>=6.0                 # Configuration parsing
+tqdm>=4.65.0                # Progress bars
+rich>=13.0.0                # Rich terminal output
+
+# Utilities
+pillow>=10.0.0              # Image handling
+
+# Optional: For GPU acceleration
+# onnxruntime-gpu>=1.16.0   # Uncomment for NVIDIA GPU support
+
+# Development dependencies (optional)
+# pytest>=7.4.0
+# black>=23.0.0
+# ruff>=0.1.0
+# mypy>=1.5.0
