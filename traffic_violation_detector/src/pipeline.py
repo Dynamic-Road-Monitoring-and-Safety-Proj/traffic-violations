@@ -216,6 +216,40 @@ class TrafficViolationPipeline:
         
         return associated_heads
     
+    def _count_riders_on_vehicle(
+        self,
+        vehicle_bbox: BoundingBox,
+        head_detections: list[BoundingBox],
+        helmet_detections: list[BoundingBox],
+        frame_height: int,
+    ) -> tuple[int, int]:
+        """
+        Count total riders on a vehicle (both with and without helmets).
+        
+        Args:
+            vehicle_bbox: Bounding box of the vehicle.
+            head_detections: List of all detected heads (no helmet) in the frame.
+            helmet_detections: List of all detected helmets in the frame.
+            frame_height: Height of the frame for normalization.
+            
+        Returns:
+            Tuple of (total_riders, riders_without_helmet)
+        """
+        # Find heads without helmets
+        associated_heads = self._find_head_for_vehicle(
+            vehicle_bbox, head_detections, frame_height
+        )
+        
+        # Find helmets (riders with helmets)
+        associated_helmets = self._find_head_for_vehicle(
+            vehicle_bbox, helmet_detections, frame_height
+        )
+        
+        total_riders = len(associated_heads) + len(associated_helmets)
+        riders_without_helmet = len(associated_heads)
+        
+        return total_riders, riders_without_helmet
+    
     def _find_plate_for_vehicle(
         self,
         vehicle_bbox: BoundingBox,
@@ -314,29 +348,49 @@ class TrafficViolationPipeline:
         self.logger.debug("Step 3: Detecting helmets in full frame...")
         all_helmet_detections = self.helmet_detector.detect(frame)
         
-        # Filter for "head" class only (no helmet = violation)
+        # Separate helmets and heads
         head_detections = [
             d for d in all_helmet_detections
             if d.class_name.lower() in ["head", "no_helmet", "nohelmet", "without helmet"]
         ]
-        self.logger.info(f"Found {len(head_detections)} heads without helmets in frame")
+        helmet_detections = [
+            d for d in all_helmet_detections
+            if d.class_name.lower() in ["helmet", "with_helmet", "withhelmet"]
+        ]
+        self.logger.info(f"Found {len(head_detections)} heads without helmets and {len(helmet_detections)} helmets in frame")
         
         # Step 4: Process each two-wheeler
         for vehicle_idx, vehicle_bbox in enumerate(vehicle_detections):
             self.logger.debug(f"Processing vehicle {vehicle_idx + 1}/{len(vehicle_detections)}")
             
-            # Step 4a: Find heads (no helmet) associated with this vehicle
-            associated_heads = self._find_head_for_vehicle(
-                vehicle_bbox, head_detections, frame_height
+            # Step 4a: Count total riders and riders without helmet
+            total_riders, riders_without_helmet = self._count_riders_on_vehicle(
+                vehicle_bbox, head_detections, helmet_detections, frame_height
             )
             
-            has_violation = len(associated_heads) > 0
+            # Check for violations
+            max_riders = self.config.detection.max_riders
+            has_helmet_violation = riders_without_helmet > 0
+            has_three_seater_violation = total_riders > max_riders
             
-            if not has_violation:
-                self.logger.debug(f"Vehicle {vehicle_idx + 1}: No violation detected")
+            # Skip if no violations
+            if not has_helmet_violation and not has_three_seater_violation:
+                self.logger.debug(f"Vehicle {vehicle_idx + 1}: No violation detected (riders: {total_riders})")
                 continue
             
-            self.logger.info(f"Vehicle {vehicle_idx + 1}: HELMET VIOLATION DETECTED! ({len(associated_heads)} riders without helmet)")
+            # Determine violation type
+            if has_helmet_violation and has_three_seater_violation:
+                violation_type = ViolationType.COMBINED
+                violation_label = f"NO HELMET + {total_riders} RIDERS"
+                self.logger.info(f"Vehicle {vehicle_idx + 1}: COMBINED VIOLATION! ({riders_without_helmet} without helmet, {total_riders} total riders)")
+            elif has_helmet_violation:
+                violation_type = ViolationType.NO_HELMET
+                violation_label = f"NO HELMET ({riders_without_helmet})"
+                self.logger.info(f"Vehicle {vehicle_idx + 1}: HELMET VIOLATION! ({riders_without_helmet} riders without helmet)")
+            else:  # has_three_seater_violation
+                violation_type = ViolationType.THREE_SEATER
+                violation_label = f"{total_riders} RIDERS"
+                self.logger.info(f"Vehicle {vehicle_idx + 1}: THREE-SEATER VIOLATION! ({total_riders} riders)")
             
             # Step 4b: Find license plate for this vehicle
             plate_bbox = self._find_plate_for_vehicle(vehicle_bbox, all_plate_detections)
@@ -358,6 +412,9 @@ class TrafficViolationPipeline:
             # Create violation record
             violation_id = generate_violation_id()
             
+            # Build violation details
+            violation_details = f"Total riders: {total_riders}, Without helmet: {riders_without_helmet}"
+            
             # Annotate and save image if configured
             image_path = None
             if self.config.output.save_images:
@@ -366,7 +423,7 @@ class TrafficViolationPipeline:
                     vehicle_bbox,
                     plate_bbox,
                     plate_text,
-                    "NO HELMET",
+                    violation_label,
                 )
                 image_path = save_violation_image(
                     annotated,
@@ -376,7 +433,7 @@ class TrafficViolationPipeline:
             
             violation = Violation(
                 violation_id=violation_id,
-                violation_type=ViolationType.NO_HELMET,
+                violation_type=violation_type,
                 timestamp=timestamp,
                 license_plate=plate_text,
                 plate_confidence=plate_confidence,
@@ -384,13 +441,15 @@ class TrafficViolationPipeline:
                 plate_bbox=plate_bbox,
                 image_path=image_path,
                 source_frame=source_name,
+                riders_count=total_riders,
+                violation_details=violation_details,
             )
             
             violations.append(violation)
             
             # Write to CSV immediately
             self.csv_writer.write_violation(violation)
-            self.logger.info(f"Violation recorded: {violation_id} - Plate: {plate_text}")
+            self.logger.info(f"Violation recorded: {violation_id} - Plate: {plate_text} - Type: {violation_type.value}")
         
         processing_time = (time.time() - start_time) * 1000
         

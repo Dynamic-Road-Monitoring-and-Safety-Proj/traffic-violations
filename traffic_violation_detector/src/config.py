@@ -25,6 +25,7 @@ class DetectionConfig:
     two_wheeler_classes: list[int]
     helmet_classes: dict[str, int]
     thresholds: dict[str, float]
+    max_riders: int = 2  # Maximum allowed riders on a two-wheeler
 
 
 @dataclass

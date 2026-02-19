@@ -14,6 +14,8 @@ import numpy as np
 class ViolationType(Enum):
     """Types of traffic violations detected."""
     NO_HELMET = "no_helmet"
+    THREE_SEATER = "three_seater"
+    COMBINED = "no_helmet_and_three_seater"  # Both violations together
     
 
 @dataclass
@@ -114,6 +116,8 @@ class Violation:
     plate_bbox: Optional[BoundingBox]
     image_path: Optional[Path]
     source_frame: Optional[str]
+    riders_count: int = 0  # Number of riders detected on the vehicle
+    violation_details: str = ""  # Additional details about the violation
     
     def to_csv_row(self) -> dict:
         """Convert violation to CSV row format."""
@@ -124,6 +128,8 @@ class Violation:
             "license_plate": self.license_plate,
             "plate_confidence": f"{self.plate_confidence:.3f}",
             "vehicle_bbox": f"{self.vehicle_bbox.to_tuple()}",
+            "riders_count": str(self.riders_count),
+            "violation_details": self.violation_details,
             "image_path": str(self.image_path) if self.image_path else "",
             "source_frame": self.source_frame or "",
         }

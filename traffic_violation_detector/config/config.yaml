@@ -30,6 +30,9 @@ detection:
     vehicle: 0.5
     helmet: 0.45
     plate: 0.4
+  
+  # Maximum allowed riders on a two-wheeler (3+ is a violation)
+  max_riders: 2
 
 # Processing Settings
 processing:
