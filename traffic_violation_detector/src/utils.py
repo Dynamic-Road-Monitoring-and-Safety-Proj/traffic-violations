@@ -79,6 +79,8 @@ class ViolationCSVWriter:
         "vehicle_bbox",
         "image_path",
         "source_frame",
+        "riders_count",
+        "violation_details",
     ]
     
     def __init__(self, csv_path: Path):

@@ -80,6 +80,11 @@ Thumbs.db
 output/
 logs/
 *.log
+datasets/
+
+# Roboflow API keys (keep private)
+.roboflow_key
+*_api_key.txt
 
 # Model files (uncomment if you want to exclude from git)
 # models/*.pt

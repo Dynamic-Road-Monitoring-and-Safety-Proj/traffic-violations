@@ -96,6 +96,7 @@ class TrafficViolationPipeline:
         self._helmet_detector: Optional[HelmetDetector] = None
         self._plate_detector: Optional[LicensePlateDetector] = None
         self._plate_ocr: Optional[PlateOCR] = None
+        self._person_detector: Optional[TwoWheelerDetector] = None
         
         self.logger.info("Traffic Violation Pipeline initialized")
         self.logger.info(f"Output directory: {self.config.get_output_dir()}")
@@ -140,6 +141,17 @@ class TrafficViolationPipeline:
                 model_name=self.config.models.plate_ocr,
             )
         return self._plate_ocr
+    
+    @property
+    def person_detector(self) -> TwoWheelerDetector:
+        """Lazy-load person detector using YOLOv11n."""
+        if self._person_detector is None:
+            self._person_detector = TwoWheelerDetector(
+                model_path=self.config.get_model_path("vehicle_detector"),
+                confidence_threshold=self.config.detection.thresholds["helmet"],
+                classes=[0],  # COCO person class
+            )
+        return self._person_detector
     
     def _expand_bbox_to_frame(
         self,
@@ -203,12 +215,12 @@ class TrafficViolationPipeline:
             head_bottom = head.y2
             
             # Check horizontal alignment: head center should be within vehicle width
-            horizontal_margin = vehicle_width * 0.6  # Allow some margin
+            horizontal_margin = vehicle_width * 1.05  # Slightly wider for triple riders
             is_horizontally_aligned = abs(head_center_x - vehicle_center_x) < horizontal_margin
             
             # Check vertical position: head should be above or at the top of vehicle
             # Head bottom should be near or above the vehicle top (with margin for overlap)
-            vertical_margin = vehicle_bbox.height * 0.5
+            vertical_margin = vehicle_bbox.height * 0.85  # Generous for crowded motorcycles
             is_above_vehicle = head_bottom <= vehicle_top + vertical_margin
             
             if is_horizontally_aligned and is_above_vehicle:
@@ -221,6 +233,7 @@ class TrafficViolationPipeline:
         vehicle_bbox: BoundingBox,
         head_detections: list[BoundingBox],
         helmet_detections: list[BoundingBox],
+        person_detections: list[BoundingBox],
         frame_height: int,
     ) -> tuple[int, int]:
         """
@@ -230,6 +243,7 @@ class TrafficViolationPipeline:
             vehicle_bbox: Bounding box of the vehicle.
             head_detections: List of all detected heads (no helmet) in the frame.
             helmet_detections: List of all detected helmets in the frame.
+            person_detections: List of all detected persons in the frame.
             frame_height: Height of the frame for normalization.
             
         Returns:
@@ -245,7 +259,19 @@ class TrafficViolationPipeline:
             vehicle_bbox, helmet_detections, frame_height
         )
         
-        total_riders = len(associated_heads) + len(associated_helmets)
+        # Find persons (additional rider detection)
+        associated_persons = self._find_head_for_vehicle(
+            vehicle_bbox, person_detections, frame_height
+        )
+        
+        # Count total riders: use person detections if more than head+helmet count
+        riders_from_head_helmet = len(associated_heads) + len(associated_helmets)
+        riders_from_persons = len(associated_persons)
+        
+        self.logger.debug(f"Associated with vehicle: {len(associated_heads)} heads, {len(associated_helmets)} helmets, {len(associated_persons)} persons")
+        
+        # Use whichever detection method found more riders
+        total_riders = max(riders_from_head_helmet, riders_from_persons)
         riders_without_helmet = len(associated_heads)
         
         return total_riders, riders_without_helmet
@@ -348,7 +374,11 @@ class TrafficViolationPipeline:
         self.logger.debug("Step 3: Detecting helmets in full frame...")
         all_helmet_detections = self.helmet_detector.detect(frame)
         
-        # Separate helmets and heads
+        # Step 3b: Detect persons using YOLOv11n for better rider counting
+        self.logger.debug("Step 3b: Detecting persons in full frame...")
+        all_person_detections = self.person_detector.detect(frame)
+        
+        # Separate helmets, heads, and persons
         head_detections = [
             d for d in all_helmet_detections
             if d.class_name.lower() in ["head", "no_helmet", "nohelmet", "without helmet"]
@@ -357,7 +387,8 @@ class TrafficViolationPipeline:
             d for d in all_helmet_detections
             if d.class_name.lower() in ["helmet", "with_helmet", "withhelmet"]
         ]
-        self.logger.info(f"Found {len(head_detections)} heads without helmets and {len(helmet_detections)} helmets in frame")
+        person_detections = all_person_detections  # Use YOLOv11n person detections
+        self.logger.info(f"Found {len(head_detections)} heads without helmets, {len(helmet_detections)} helmets, and {len(person_detections)} persons in frame")
         
         # Step 4: Process each two-wheeler
         for vehicle_idx, vehicle_bbox in enumerate(vehicle_detections):
@@ -365,7 +396,7 @@ class TrafficViolationPipeline:
             
             # Step 4a: Count total riders and riders without helmet
             total_riders, riders_without_helmet = self._count_riders_on_vehicle(
-                vehicle_bbox, head_detections, helmet_detections, frame_height
+                vehicle_bbox, head_detections, helmet_detections, person_detections, frame_height
             )
             
             # Check for violations

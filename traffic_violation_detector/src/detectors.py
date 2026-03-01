@@ -298,14 +298,14 @@ class PlateOCR:
             Tuple of (plate_text, average_confidence).
         """
         try:
-            # Convert BGR to grayscale - the model expects single-channel input
-            if len(plate_image.shape) == 3:
-                gray_plate = cv2.cvtColor(plate_image, cv2.COLOR_BGR2GRAY)
+            # Convert BGR to RGB - the CCT model expects RGB input
+            if len(plate_image.shape) == 3 and plate_image.shape[2] == 3:
+                rgb_plate = cv2.cvtColor(plate_image, cv2.COLOR_BGR2RGB)
             else:
-                gray_plate = plate_image
+                rgb_plate = plate_image
             
-            # Run OCR on the grayscale image
-            result = self.recognizer.run(gray_plate, return_confidence=True)
+            # Run OCR on the RGB image
+            result = self.recognizer.run(rgb_plate, return_confidence=True)
             
             if isinstance(result, tuple):
                 plates, confidences = result

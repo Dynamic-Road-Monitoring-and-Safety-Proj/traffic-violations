@@ -13,7 +13,8 @@ models:
   plate_detector: "models/license-plate-finetune-v1m.pt"
   
   # OCR model for license plate recognition (from fast-plate-ocr hub)
-  plate_ocr: "global-plates-mobile-vit-v2-model"
+  # Using CCT-S-ReLU for best accuracy on global license plates
+  plate_ocr: "cct-s-relu-v1-global-model"
 
 # Detection Classes
 detection:
@@ -28,7 +29,7 @@ detection:
   # Confidence thresholds
   thresholds:
     vehicle: 0.5
-    helmet: 0.45
+    helmet: 0.3
     plate: 0.4
   
   # Maximum allowed riders on a two-wheeler (3+ is a violation)
