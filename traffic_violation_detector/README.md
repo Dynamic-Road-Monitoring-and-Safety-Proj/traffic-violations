@@ -1,5 +1,7 @@
 # Traffic Violation Detection System
 
+> Part of [SadakVision](https://sadakvision.com) — see the [repo root README](../README.md) for how this fits into the broader platform.
+
 A complete computer vision pipeline for detecting traffic violations on two-wheelers (motorcycles and scooters), specifically focusing on helmet violations. The system detects violating vehicles, reads their license plates using OCR, and logs violations to a CSV file.
 
 ## 🎯 Features
